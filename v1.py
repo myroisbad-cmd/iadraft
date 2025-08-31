@@ -393,14 +393,14 @@ def extract_additional_simple_stats(soup):
     return result
 
 def clean_numeric_value(value):
-    """Extrait la valeur numérique principale d'une chaîne de caractères"""
+    """Extrait SEULEMENT la première valeur numérique d'une chaîne de caractères"""
     if value is None or value == "N/A" or value == "Erreur" or value == "Erreur réseau":
         return None
     
     # Convertir en string si ce n'est pas déjà le cas
     value_str = str(value)
     
-    # Extraire le premier nombre trouvé (entier ou décimal)
+    # Extraire SEULEMENT le premier nombre trouvé (entier ou décimal)
     match = re.search(r'(\d+(?:\.\d+)?)', value_str)
     if match:
         num_str = match.group(1)
@@ -413,26 +413,26 @@ def clean_numeric_value(value):
     return None
 
 def clean_percentage_value(value):
-    """Extrait la valeur numérique d'un pourcentage"""
+    """Extrait SEULEMENT la première valeur numérique d'un pourcentage"""
     if value is None or value == "N/A" or value == "Erreur" or value == "Erreur réseau":
         return None
     
     value_str = str(value)
-    # Chercher un nombre suivi de %
+    # Chercher SEULEMENT le premier nombre suivi de %
     match = re.search(r'(\d+(?:\.\d+)?)%', value_str)
     if match:
         return float(match.group(1))
     
-    # Si pas de %, essayer d'extraire juste le nombre
+    # Si pas de %, essayer d'extraire juste le premier nombre
     return clean_numeric_value(value_str)
 
 def clean_speed_value(value):
-    """Extrait la valeur de vitesse (sans les parenthèses descriptives)"""
+    """Extrait SEULEMENT la première valeur de vitesse (sans les parenthèses descriptives)"""
     if value is None or value == "N/A" or value == "Erreur" or value == "Erreur réseau":
         return None
     
     value_str = str(value)
-    # Extraire le premier nombre trouvé
+    # Extraire SEULEMENT le premier nombre trouvé
     match = re.search(r'(\d+)', value_str)
     if match:
         return int(match.group(1))
@@ -440,12 +440,12 @@ def clean_speed_value(value):
     return None
 
 def clean_range_value(value):
-    """Extrait la valeur de portée"""
+    """Extrait SEULEMENT la première valeur de portée"""
     if value is None or value == "N/A" or value == "Erreur" or value == "Erreur réseau":
         return None
     
     value_str = str(value)
-    # Extraire le premier nombre (peut être décimal)
+    # Extraire SEULEMENT le premier nombre (peut être décimal)
     match = re.search(r'(\d+(?:\.\d+)?)', value_str)
     if match:
         num_str = match.group(1)
@@ -457,12 +457,12 @@ def clean_range_value(value):
     return None
 
 def clean_cooldown_value(value):
-    """Extrait la valeur de cooldown en secondes"""
+    """Extrait SEULEMENT la première valeur de cooldown en secondes"""
     if value is None or value == "N/A" or value == "Erreur" or value == "Erreur réseau":
         return None
     
     value_str = str(value)
-    # Chercher un nombre suivi de 's' ou 'second'
+    # Chercher SEULEMENT le premier nombre suivi de 's' ou 'second'
     match = re.search(r'(\d+(?:\.\d+)?)', value_str)
     if match:
         num_str = match.group(1)
