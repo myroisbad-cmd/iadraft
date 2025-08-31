@@ -203,7 +203,7 @@ def extract_health_table(soup):
     return health_dict
 
 def extract_attack_table(soup):
-    """Extrait la table de dégâts d'attaque par niveau (Dash/Slash)"""
+    """Extrait la table de dégâts d'attaque par niveau avec support pour différents formats"""
     attack_dict = {}
     try:
         attack_section = None
@@ -218,12 +218,19 @@ def extract_attack_table(soup):
                 rows = table.find_all('tr')
                 for row in rows:
                     cells = row.find_all('td')
-                    if len(cells) == 3:
+                    if len(cells) >= 2:
                         try:
                             level = int(cells[0].get_text().strip())
-                            dash = int(cells[1].get_text().strip())
-                            slash = int(cells[2].get_text().strip())
-                            attack_dict[level] = {'dash': dash, 'slash': slash}
+                            # Support pour différents formats de colonnes
+                            if len(cells) == 2:
+                                # Format simple: Level, Damage
+                                damage = int(cells[1].get_text().strip())
+                                attack_dict[level] = {'damage': damage}
+                            elif len(cells) == 3:
+                                # Format avec 2 colonnes de dégâts: Level, Min/Damage, Max/Damage2
+                                damage1 = int(cells[1].get_text().strip())
+                                damage2 = int(cells[2].get_text().strip())
+                                attack_dict[level] = {'damage': damage1, 'damage2': damage2}
                         except:
                             continue
     except Exception as e:
@@ -231,7 +238,7 @@ def extract_attack_table(soup):
     return attack_dict
 
 def extract_super_table(soup):
-    """Extrait la table de dégâts du Super par niveau"""
+    """Extrait la table de dégâts du Super par niveau avec support pour dégâts par seconde"""
     super_dict = {}
     try:
         super_section = None
@@ -250,7 +257,20 @@ def extract_super_table(soup):
                         try:
                             level = int(cells[0].get_text().strip())
                             value = int(cells[1].get_text().strip())
-                            super_dict[level] = value
+                            # Détecter si c'est des dégâts par seconde en regardant les en-têtes
+                            header_row = table.find('tr')
+                            if header_row:
+                                header_cells = header_row.find_all('td')
+                                if len(header_cells) >= 2:
+                                    header_text = header_cells[1].get_text().lower()
+                                    if 'per second' in header_text or 'damage per second' in header_text:
+                                        super_dict[level] = {'damage_per_second': value}
+                                    else:
+                                        super_dict[level] = {'damage': value}
+                                else:
+                                    super_dict[level] = {'damage': value}
+                            else:
+                                super_dict[level] = {'damage': value}
                         except:
                             continue
     except Exception as e:
@@ -390,6 +410,9 @@ def extract_additional_simple_stats(soup):
         val = extract_simple_data(soup, data_source)
         if val != 'N/A':
             result[label] = val
+        # Mettre le nombre de projectiles à 1 quand il est vide
+        elif label == 'Projectiles per attack':
+            result[label] = '1'
     return result
 
 def scrape_brawler_data(brawler_name):
@@ -418,6 +441,11 @@ def scrape_brawler_data(brawler_name):
             'Super Range': extract_simple_data(soup, 'SuperRange'),
             'Projectiles per Super': extract_simple_data(soup, 'SuperBullets'),
             'Projectile speed': extract_simple_data(soup, 'SuperSpeed'),
+            # Nouvelles colonnes de dégâts
+            'Attack Damage_11': '',
+            'Attack Damage2_11': '',
+            'Super Damage_11': '',
+            'Super Damage_per_second_11': '',
         }
         # Ajouter les stats simples additionnelles
         data.update(extract_additional_simple_stats(soup))
@@ -425,20 +453,23 @@ def scrape_brawler_data(brawler_name):
         health_dict = extract_health_table(soup)
         if 11 in health_dict:
             data['Health_11'] = health_dict[11]
-        # Dégâts attaque par niveau (générique, niveau 11 uniquement)
-        attack_tables = extract_all_tables_by_section(soup, 'Attack')
-        for entry in attack_tables:
-            if entry.get('Level') == '11' or entry.get('Level') == 11:
-                for k, v in entry.items():
-                    if k != 'Level':
-                        data[f'Attack_{k}_11'] = v
-        # Dégâts super par niveau (générique, niveau 11 uniquement)
-        super_tables = extract_all_tables_by_section(soup, 'Super')
-        for entry in super_tables:
-            if entry.get('Level') == '11' or entry.get('Level') == 11:
-                for k, v in entry.items():
-                    if k != 'Level':
-                        data[f'Super_{k}_11'] = v
+        # Dégâts attaque par niveau avec nouvelle logique
+        attack_dict = extract_attack_table(soup)
+        if 11 in attack_dict:
+            attack_data = attack_dict[11]
+            if 'damage' in attack_data:
+                data['Attack Damage_11'] = attack_data['damage']
+            if 'damage2' in attack_data:
+                data['Attack Damage2_11'] = attack_data['damage2']
+        
+        # Dégâts super par niveau avec nouvelle logique
+        super_dict = extract_super_table(soup)
+        if 11 in super_dict:
+            super_data = super_dict[11]
+            if 'damage' in super_data:
+                data['Super Damage_11'] = super_data['damage']
+            if 'damage_per_second' in super_data:
+                data['Super Damage_per_second_11'] = super_data['damage_per_second']
         # Bonus Hypercharge
         hyper_bonuses = extract_hypercharge_bonuses(soup)
         for k, v in hyper_bonuses.items():
@@ -558,6 +589,10 @@ def scrape_brawler_data(brawler_name):
             'Super Range': "Erreur réseau",
             'Projectiles per Super': "Erreur réseau",
             'Projectile speed': "Erreur réseau",
+            'Attack Damage_11': "Erreur réseau",
+            'Attack Damage2_11': "Erreur réseau",
+            'Super Damage_11': "Erreur réseau",
+            'Super Damage_per_second_11': "Erreur réseau",
             'Super Charge per Hit (%)': "Erreur réseau",
             'Hypercharge per Hit (%)': "Erreur réseau",
             'Gadget 1 Cooldown': "Erreur réseau",
@@ -577,6 +612,10 @@ def scrape_brawler_data(brawler_name):
             'Super Range': "Erreur",
             'Projectiles per Super': "Erreur",
             'Projectile speed': "Erreur",
+            'Attack Damage_11': "Erreur",
+            'Attack Damage2_11': "Erreur",
+            'Super Damage_11': "Erreur",
+            'Super Damage_per_second_11': "Erreur",
             'Super Charge per Hit (%)': "Erreur",
             'Hypercharge per Hit (%)': "Erreur",
             'Gadget 1 Cooldown': "Erreur",
@@ -632,6 +671,10 @@ def main():
             print(f"    Hyper: {data['Hypercharge per Hit (%)']}")
             print(f"    Gadget 1: {data['Gadget 1 Cooldown']}")
             print(f"    Gadget 2: {data['Gadget 2 Cooldown']}")
+            print(f"    Attack Dmg: {data.get('Attack Damage_11', 'N/A')}")
+            print(f"    Attack Dmg2: {data.get('Attack Damage2_11', 'N/A')}")
+            print(f"    Super Dmg: {data.get('Super Damage_11', 'N/A')}")
+            print(f"    Super DPS: {data.get('Super Damage_per_second_11', 'N/A')}")
             print()
         
         # Pause pour éviter de surcharger le serveur
@@ -673,16 +716,27 @@ def main():
     print(f"   • Gadget 1 trouvé: {len(df[~df['Gadget 1 Cooldown'].isin(['N/A', 'Erreur', 'Erreur réseau'])])}/{len(df)}")
     print(f"   • Gadget 2 trouvé: {len(df[~df['Gadget 2 Cooldown'].isin(['N/A', 'Erreur', 'Erreur réseau'])])}/{len(df)}")
     
+    # Statistiques pour les nouvelles colonnes de dégâts
+    if 'Attack Damage_11' in df.columns:
+        print(f"   • Attack Damage trouvé: {len(df[~df['Attack Damage_11'].isin(['', 'N/A', 'Erreur', 'Erreur réseau'])])}/{len(df)}")
+    if 'Attack Damage2_11' in df.columns:
+        print(f"   • Attack Damage2 trouvé: {len(df[~df['Attack Damage2_11'].isin(['', 'N/A', 'Erreur', 'Erreur réseau'])])}/{len(df)}")
+    if 'Super Damage_11' in df.columns:
+        print(f"   • Super Damage trouvé: {len(df[~df['Super Damage_11'].isin(['', 'N/A', 'Erreur', 'Erreur réseau'])])}/{len(df)}")
+    if 'Super Damage_per_second_11' in df.columns:
+        print(f"   • Super DPS trouvé: {len(df[~df['Super Damage_per_second_11'].isin(['', 'N/A', 'Erreur', 'Erreur réseau'])])}/{len(df)}")
+    
     success_rate = (successful / len(df)) * 100
     print(f"   • Taux de succès global: {success_rate:.1f}%")
     
     # Afficher les Brawlers avec le plus de données
     print(f"\n🏆 TOP 5 des Brawlers avec le plus de données:")
     df['data_count'] = df.apply(lambda row: sum(1 for v in row.values[1:] 
-                                              if v not in ['N/A', 'Erreur', 'Erreur réseau']), axis=1)
+                                              if v not in ['N/A', 'Erreur', 'Erreur réseau', '']), axis=1)
     top_brawlers = df.nlargest(5, 'data_count')[['Brawler', 'data_count']]
+    total_columns = len(df.columns) - 1  # Exclure la colonne 'Brawler'
     for idx, row in top_brawlers.iterrows():
-        print(f"   {row['Brawler']}: {row['data_count']}/4 données")
+        print(f"   {row['Brawler']}: {row['data_count']}/{total_columns} données")
 
 if __name__ == "__main__":
     main()
