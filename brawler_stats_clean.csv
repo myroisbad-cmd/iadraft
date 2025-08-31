@@ -1,3 +1,2 @@
-Brawler,Rarity,Class,Movement_Speed,Health_Level_11,Attack_Range,Reload,Super_Range,Projectiles_per_Attack,Projectiles_per_Super,Attack_Projectile_Speed,Super_Projectile_Speed,Super_Charge_per_Hit_Percent,Hypercharge_per_Hit_Percent,Gadget_1_Cooldown_Seconds,Gadget_2_Cooldown_Seconds
-8-BIT,Super Rare,Damage Dealer,580,10000,10,1.5,5.0,618,,4500,11964500.0,8.48,2.968,18,11
-Bonnie,Epic,Marksman,620,9600,9,1.0,7.33,1,,3800,,30.8,12.32,16,10
+Brawler,Rarity,Class,Movement_Speed,Health_Level_11,Attack_Range,Reload,Super_Range,Projectiles_per_Super,Attack_Projectile_Speed,Super_Projectile_Speed,Super_Charge_per_Hit_Percent,Hypercharge_per_Hit_Percent,Gadget_1_Cooldown_Seconds,Gadget_2_Cooldown_Seconds,Super_Duration_Seconds
+Angelo,Epic,Marksman,820,6000,10,0.1,2.33,,4000,,3.5,1.225,18,18,8

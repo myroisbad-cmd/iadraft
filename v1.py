@@ -322,6 +322,45 @@ def extract_all_tables_by_section(soup, section_title):
         print(f"Erreur extraction tables section {section_title}: {e}")
     return results
 
+def extract_damage_level_11(soup, section_title):
+    """Extrait spécifiquement les dégâts au niveau 11 pour une section donnée"""
+    try:
+        # Approche simplifiée: chercher toutes les cellules contenant "11"
+        all_cells = soup.find_all('td')
+        
+        for cell in all_cells:
+            if cell.get_text().strip() == '11':
+                # Vérifier si c'est dans une table avec plusieurs colonnes
+                row = cell.find_parent('tr')
+                if row:
+                    cells = row.find_all('td')
+                    if len(cells) >= 2:
+                        # Vérifier le contexte pour s'assurer qu'on est dans la bonne section
+                        section_parent = cell.find_parent('section')
+                        if section_parent:
+                            section_text = section_parent.get_text().lower()
+                            if section_title.lower() in section_text:
+                                damage_values = {}
+                                # Extraire les valeurs après la colonne niveau
+                                for i, cell_data in enumerate(cells[1:], 1):
+                                    value = cell_data.get_text().strip()
+                                    if value and value.isdigit():
+                                        if i == 1:
+                                            damage_values['Min. Damage'] = value
+                                        elif i == 2:
+                                            damage_values['Max. Damage'] = value
+                                        else:
+                                            damage_values[f'Damage_{i}'] = value
+                                
+                                if damage_values:
+                                    print(f"DEBUG: Dégâts extraits pour {section_title}: {damage_values}")
+                                    return damage_values
+                            
+    except Exception as e:
+        print(f"Erreur extraction dégâts niveau 11 pour {section_title}: {e}")
+    
+    return {}
+
 def extract_gadgets_and_star_powers(soup):
     """Extrait les gadgets et star powers (nom, cooldown, stats par niveau)"""
     gadgets = []
@@ -513,6 +552,15 @@ def scrape_brawler_data(brawler_name):
                 for k, v in entry.items():
                     if k != 'Level':
                         data[f'Attack_{k}_11'] = v
+        
+        # Extraction spécialisée des dégâts niveau 11
+        attack_damages = extract_damage_level_11(soup, 'Attack')
+        print(f"DEBUG: Attack damages trouvés pour {brawler_name}: {attack_damages}")
+        for damage_type, damage_value in attack_damages.items():
+            if 'min' in damage_type.lower() or 'damage' in damage_type.lower():
+                data['Attack_Main_Damage_11'] = damage_value
+            elif 'max' in damage_type.lower():
+                data['Attack_Secondary_Damage_11'] = damage_value
         # Dégâts super par niveau (générique, niveau 11 uniquement)
         super_tables = extract_all_tables_by_section(soup, 'Super')
         for entry in super_tables:
@@ -520,6 +568,14 @@ def scrape_brawler_data(brawler_name):
                 for k, v in entry.items():
                     if k != 'Level':
                         data[f'Super_{k}_11'] = v
+        
+        # Extraction spécialisée des dégâts Super niveau 11
+        super_damages = extract_damage_level_11(soup, 'Super')
+        print(f"DEBUG: Super damages trouvés pour {brawler_name}: {super_damages}")
+        for damage_type, damage_value in super_damages.items():
+            if 'damage' in damage_type.lower():
+                data['Super_Damage_11'] = damage_value
+                break
         # Bonus Hypercharge
         hyper_bonuses = extract_hypercharge_bonuses(soup)
         for k, v in hyper_bonuses.items():
@@ -688,6 +744,13 @@ def clean_dataframe_for_calculations(df):
         'Super duration': clean_cooldown_value,
     }
     
+    # Ajouter les nouvelles colonnes de dégâts au mapping
+    numeric_columns.update({
+        'Attack_Main_Damage_11': clean_numeric_value,
+        'Attack_Secondary_Damage_11': clean_numeric_value,
+        'Super_Damage_11': clean_numeric_value,
+    })
+    
     # Nettoyer les colonnes numériques
     for col, clean_func in numeric_columns.items():
         if col in df_clean.columns:
@@ -701,7 +764,8 @@ def clean_dataframe_for_calculations(df):
                         'Attack Range', 'Reload', 'Super Range', 'Projectiles per attack',
                         'Projectiles per Super', 'Attack projectile speed', 'Projectile speed',
                         'Super Charge per Hit (%)', 'Hypercharge per Hit (%)', 
-                        'Gadget 1 Cooldown', 'Gadget 2 Cooldown', 'Super duration']
+                        'Gadget 1 Cooldown', 'Gadget 2 Cooldown', 'Super duration',
+                        'Attack_Main_Damage_11', 'Attack_Secondary_Damage_11', 'Super_Damage_11']
     
     # Filtrer les colonnes qui existent dans le DataFrame
     available_columns = [col for col in important_columns if col in df_clean.columns]
@@ -725,6 +789,10 @@ def clean_dataframe_for_calculations(df):
     }
     
     df_final = df_final.rename(columns=column_rename)
+    
+    # Mettre 1 par défaut pour Projectiles_per_Attack si pas de valeur
+    if 'Projectiles_per_Attack' in df_final.columns:
+        df_final['Projectiles_per_Attack'] = df_final['Projectiles_per_Attack'].fillna(1)
     
     return df_final
 
