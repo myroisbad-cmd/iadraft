@@ -322,6 +322,56 @@ def extract_all_tables_by_section(soup, section_title):
         print(f"Erreur extraction tables section {section_title}: {e}")
     return results
 
+def extract_damage_level_11(soup, section_title):
+    """Extrait spécifiquement les dégâts au niveau 11 pour une section donnée"""
+    try:
+        # Chercher les cellules avec data-source="Attack", "Attack2", "Super" et contenu "11"
+        level_11_cells = []
+        
+        # Trouver toutes les cellules td qui contiennent "11"
+        for cell in soup.find_all('td'):
+            if cell.get_text().strip() == '11':
+                # Vérifier le data-source pour identifier le type
+                data_source = cell.get('data-source', '')
+                if data_source in ['Attack', 'Attack2', 'Super']:
+                    level_11_cells.append(cell)
+        
+        # Si pas trouvé avec data-source, chercher par contexte de section
+        if not level_11_cells:
+            for cell in soup.find_all('td'):
+                if cell.get_text().strip() == '11':
+                    # Vérifier si on est dans la bonne section par le contexte parent
+                    parent_section = cell.find_parent('section', class_='pi-item pi-group pi-border-color pi-collapse pi-collapse-open')
+                    if parent_section:
+                        h2 = parent_section.find('h2')
+                        if h2 and section_title.lower() in h2.get_text().lower():
+                            level_11_cells.append(cell)
+        
+        # Extraire les valeurs de dégâts
+        damage_values = {}
+        for cell in level_11_cells:
+            row = cell.find_parent('tr')
+            if row:
+                cells_in_row = row.find_all('td')
+                if len(cells_in_row) >= 2:
+                    # La première cellule est le niveau, les suivantes sont les dégâts
+                    for i, damage_cell in enumerate(cells_in_row[1:], 1):
+                        value = damage_cell.get_text().strip()
+                        if value and value.replace('.', '').isdigit():
+                            if i == 1:
+                                damage_values['Min_Damage'] = value
+                            elif i == 2:
+                                damage_values['Max_Damage'] = value
+                            else:
+                                damage_values[f'Damage_{i}'] = value
+        
+        return damage_values
+                            
+    except Exception as e:
+        print(f"Erreur extraction dégâts niveau 11 pour {section_title}: {e}")
+    
+    return {}
+
 def extract_gadgets_and_star_powers(soup):
     """Extrait les gadgets et star powers (nom, cooldown, stats par niveau)"""
     gadgets = []
@@ -392,6 +442,87 @@ def extract_additional_simple_stats(soup):
             result[label] = val
     return result
 
+def clean_numeric_value(value):
+    """Extrait SEULEMENT la première valeur numérique d'une chaîne de caractères"""
+    if value is None or value == "N/A" or value == "Erreur" or value == "Erreur réseau":
+        return None
+    
+    # Convertir en string si ce n'est pas déjà le cas
+    value_str = str(value)
+    
+    # Extraire SEULEMENT le premier nombre trouvé (entier ou décimal)
+    match = re.search(r'(\d+(?:\.\d+)?)', value_str)
+    if match:
+        num_str = match.group(1)
+        # Retourner int si c'est un entier, float sinon
+        if '.' in num_str:
+            return float(num_str)
+        else:
+            return int(num_str)
+    
+    return None
+
+def clean_percentage_value(value):
+    """Extrait SEULEMENT la première valeur numérique d'un pourcentage"""
+    if value is None or value == "N/A" or value == "Erreur" or value == "Erreur réseau":
+        return None
+    
+    value_str = str(value)
+    # Chercher SEULEMENT le premier nombre suivi de %
+    match = re.search(r'(\d+(?:\.\d+)?)%', value_str)
+    if match:
+        return float(match.group(1))
+    
+    # Si pas de %, essayer d'extraire juste le premier nombre
+    return clean_numeric_value(value_str)
+
+def clean_speed_value(value):
+    """Extrait SEULEMENT la première valeur de vitesse (sans les parenthèses descriptives)"""
+    if value is None or value == "N/A" or value == "Erreur" or value == "Erreur réseau":
+        return None
+    
+    value_str = str(value)
+    # Extraire SEULEMENT le premier nombre trouvé
+    match = re.search(r'(\d+)', value_str)
+    if match:
+        return int(match.group(1))
+    
+    return None
+
+def clean_range_value(value):
+    """Extrait SEULEMENT la première valeur de portée"""
+    if value is None or value == "N/A" or value == "Erreur" or value == "Erreur réseau":
+        return None
+    
+    value_str = str(value)
+    # Extraire SEULEMENT le premier nombre (peut être décimal)
+    match = re.search(r'(\d+(?:\.\d+)?)', value_str)
+    if match:
+        num_str = match.group(1)
+        if '.' in num_str:
+            return float(num_str)
+        else:
+            return int(num_str)
+    
+    return None
+
+def clean_cooldown_value(value):
+    """Extrait SEULEMENT la première valeur de cooldown en secondes"""
+    if value is None or value == "N/A" or value == "Erreur" or value == "Erreur réseau":
+        return None
+    
+    value_str = str(value)
+    # Chercher SEULEMENT le premier nombre suivi de 's' ou 'second'
+    match = re.search(r'(\d+(?:\.\d+)?)', value_str)
+    if match:
+        num_str = match.group(1)
+        if '.' in num_str:
+            return float(num_str)
+        else:
+            return int(num_str)
+    
+    return None
+
 def scrape_brawler_data(brawler_name):
     """Scrape les données d'un Brawler en utilisant la structure HTML observée"""
     base_url = 'https://brawlstars.fandom.com/wiki/'
@@ -432,6 +563,13 @@ def scrape_brawler_data(brawler_name):
                 for k, v in entry.items():
                     if k != 'Level':
                         data[f'Attack_{k}_11'] = v
+        
+        # Extraction spécialisée des dégâts niveau 11
+        attack_damages = extract_damage_level_11(soup, 'Attack')
+        if 'Min_Damage' in attack_damages:
+            data['Attack_Min_Damage_11'] = attack_damages['Min_Damage']
+        if 'Max_Damage' in attack_damages:
+            data['Attack_Max_Damage_11'] = attack_damages['Max_Damage']
         # Dégâts super par niveau (générique, niveau 11 uniquement)
         super_tables = extract_all_tables_by_section(soup, 'Super')
         for entry in super_tables:
@@ -439,6 +577,13 @@ def scrape_brawler_data(brawler_name):
                 for k, v in entry.items():
                     if k != 'Level':
                         data[f'Super_{k}_11'] = v
+        
+        # Extraction spécialisée des dégâts Super niveau 11
+        super_damages = extract_damage_level_11(soup, 'Super')
+        if 'Min_Damage' in super_damages:
+            data['Super_Damage_11'] = super_damages['Min_Damage']
+        elif 'Damage_1' in super_damages:
+            data['Super_Damage_11'] = super_damages['Damage_1']
         # Bonus Hypercharge
         hyper_bonuses = extract_hypercharge_bonuses(soup)
         for k, v in hyper_bonuses.items():
@@ -583,6 +728,84 @@ def scrape_brawler_data(brawler_name):
             'Gadget 2 Cooldown': "Erreur"
         }
 
+def clean_dataframe_for_calculations(df):
+    """Nettoie le DataFrame pour ne garder que des valeurs numériques exploitables"""
+    df_clean = df.copy()
+    
+    # Colonnes à nettoyer avec leurs fonctions de nettoyage spécifiques
+    numeric_columns = {
+        'Movement speed': clean_speed_value,
+        'Attack Range': clean_range_value,
+        'Reload': clean_cooldown_value,
+        'Super Range': clean_range_value,
+        'Projectiles per Super': clean_numeric_value,
+        'Projectile speed': clean_numeric_value,
+        'Projectiles per attack': clean_numeric_value,
+        'Attack width': clean_numeric_value,
+        'Attack projectile speed': clean_numeric_value,
+        'Thorny grenade range': clean_numeric_value,
+        'Health_11': clean_numeric_value,
+        'Super Charge per Hit (%)': clean_percentage_value,
+        'Hypercharge per Hit (%)': clean_percentage_value,
+        'Gadget 1 Cooldown': clean_cooldown_value,
+        'Gadget 2 Cooldown': clean_cooldown_value,
+        'Super duration': clean_cooldown_value,
+    }
+    
+    # Ajouter les nouvelles colonnes de dégâts au mapping
+    numeric_columns.update({
+        'Attack_Min_Damage_11': clean_numeric_value,
+        'Attack_Max_Damage_11': clean_numeric_value,
+        'Super_Damage_11': clean_numeric_value,
+    })
+    
+    # Nettoyer les colonnes numériques
+    for col, clean_func in numeric_columns.items():
+        if col in df_clean.columns:
+            df_clean[col] = df_clean[col].apply(clean_func)
+    
+    # Colonnes à garder en texte (seulement les noms et identifiants)
+    text_columns = ['Brawler', 'Rarity', 'Class', 'Voice actor']
+    
+    # Créer un nouveau DataFrame avec seulement les colonnes importantes
+    important_columns = ['Brawler', 'Rarity', 'Class', 'Movement speed', 'Health_11', 
+                        'Attack Range', 'Reload', 'Super Range', 'Projectiles per attack',
+                        'Projectiles per Super', 'Attack projectile speed', 'Projectile speed',
+                        'Super Charge per Hit (%)', 'Hypercharge per Hit (%)', 
+                        'Gadget 1 Cooldown', 'Gadget 2 Cooldown', 'Super duration',
+                        'Attack_Min_Damage_11', 'Attack_Max_Damage_11', 'Super_Damage_11']
+    
+    # Filtrer les colonnes qui existent dans le DataFrame
+    available_columns = [col for col in important_columns if col in df_clean.columns]
+    df_final = df_clean[available_columns].copy()
+    
+    # Renommer les colonnes pour plus de clarté
+    column_rename = {
+        'Movement speed': 'Movement_Speed',
+        'Attack Range': 'Attack_Range', 
+        'Super Range': 'Super_Range',
+        'Projectiles per attack': 'Projectiles_per_Attack',
+        'Projectiles per Super': 'Projectiles_per_Super',
+        'Attack projectile speed': 'Attack_Projectile_Speed',
+        'Projectile speed': 'Super_Projectile_Speed',
+        'Super Charge per Hit (%)': 'Super_Charge_per_Hit_Percent',
+        'Hypercharge per Hit (%)': 'Hypercharge_per_Hit_Percent',
+        'Gadget 1 Cooldown': 'Gadget_1_Cooldown_Seconds',
+        'Gadget 2 Cooldown': 'Gadget_2_Cooldown_Seconds',
+        'Super duration': 'Super_Duration_Seconds',
+        'Health_11': 'Health_Level_11'
+    }
+    
+    df_final = df_final.rename(columns=column_rename)
+    
+    # Mettre 1 par défaut pour les projectiles si pas de valeur
+    projectile_columns = ['Projectiles_per_Attack', 'Projectiles_per_Super']
+    for col in projectile_columns:
+        if col in df_final.columns:
+            df_final[col] = df_final[col].fillna(1)
+    
+    return df_final
+
 def main():
     print("🎯 Scraper Brawl Stars Wiki - Version Améliorée v2.0")
     print("="*60)
@@ -591,18 +814,25 @@ def main():
     brawlers = get_all_brawlers()
     print(f"✅ {len(brawlers)} Brawlers trouvés")
     
-    # Option pour tester sur quelques Brawlers d'abord
-    test_mode = input("\n🧪 Mode test (5 premiers Brawlers) ? (y/N): ").lower() == 'y'
-    if test_mode:
-        brawlers = brawlers[:5]
-        print(f"🔬 Mode test activé - {len(brawlers)} Brawlers")
-    
     # Option pour tester sur des Brawlers spécifiques
     test_specific = input("\n🎯 Tester des Brawlers spécifiques (ex: Spike,Colt) ? (laissez vide pour tous): ").strip()
     if test_specific:
         specific_brawlers = [b.strip() for b in test_specific.split(',')]
-        brawlers = [b for b in brawlers if b in specific_brawlers]
+        # Rechercher les brawlers correspondants (insensible à la casse) dans la liste complète
+        matched_brawlers = []
+        for specific in specific_brawlers:
+            for brawler in brawlers:
+                if specific.lower() == brawler.lower():
+                    matched_brawlers.append(brawler)
+                    break
+        brawlers = matched_brawlers
         print(f"🔍 Test spécifique - {len(brawlers)} Brawlers: {', '.join(brawlers)}")
+    else:
+        # Option pour tester sur quelques Brawlers d'abord
+        test_mode = input("\n🧪 Mode test (5 premiers Brawlers) ? (y/N): ").lower() == 'y'
+        if test_mode:
+            brawlers = brawlers[:5]
+            print(f"🔬 Mode test activé - {len(brawlers)} Brawlers")
     
     all_data = []
     successful = 0
@@ -627,7 +857,7 @@ def main():
             print("❌")
         
         # Afficher les données récupérées pour le debug
-        if test_mode or test_specific:
+        if test_specific or (len(brawlers) <= 5):
             print(f"    Super: {data['Super Charge per Hit (%)']}")
             print(f"    Hyper: {data['Hypercharge per Hit (%)']}")
             print(f"    Gadget 1: {data['Gadget 1 Cooldown']}")
@@ -638,51 +868,69 @@ def main():
         time.sleep(1.5)
         
         # Affichage du progrès tous les 10 Brawlers
-        if i % 10 == 0 and not (test_mode or test_specific):
+        if i % 10 == 0 and len(brawlers) > 10:
             success_rate = (successful / i) * 100
             print(f"   📈 Progression: {i}/{len(brawlers)} | Succès: {success_rate:.1f}%")
     
     # Créer le DataFrame
     df = pd.DataFrame(all_data)
     
+    # Nettoyer les données pour avoir seulement des valeurs numériques
+    df_clean = clean_dataframe_for_calculations(df)
+    
     # Afficher les résultats
     print("\n" + "="*80)
     print("📊 RÉSULTATS DU SCRAPING")
     print("="*80)
     
-    # Afficher un échantillon
-    print(f"\n🔍 Aperçu des données (premiers {min(10, len(df))} résultats):")
-    print(df.head(10).to_string(index=False))
+    # Afficher un échantillon du CSV original
+    print(f"\n🔍 Aperçu des données originales (premiers {min(5, len(df))} résultats):")
+    print(df.head(5).to_string(index=False))
+    
+    # Afficher un échantillon du CSV nettoyé
+    print(f"\n🧹 Aperçu des données nettoyées (premiers {min(10, len(df_clean))} résultats):")
+    print(df_clean.head(10).to_string(index=False))
     
     if len(df) > 10:
         print(f"\n... et {len(df) - 10} autres Brawlers")
     
-    # Sauvegarder en CSV
-    filename = 'brawler_complete_stats_v2.csv'
-    df.to_csv(filename, index=False, encoding='utf-8')
-    print(f"\n💾 Données sauvegardées dans '{filename}'")
+    # Sauvegarder les deux versions
+    filename_original = 'brawler_complete_stats_v2.csv'
+    filename_clean = 'brawler_stats_clean.csv'
+    
+    df.to_csv(filename_original, index=False, encoding='utf-8')
+    df_clean.to_csv(filename_clean, index=False, encoding='utf-8')
+    
+    print(f"\n💾 Données originales sauvegardées dans '{filename_original}'")
+    print(f"💾 Données nettoyées sauvegardées dans '{filename_clean}'")
     
     # Statistiques détaillées
     print(f"\n📈 STATISTIQUES:")
     print(f"   • Total Brawlers scrapés: {len(df)}")
-    print(f"   • Super Charge trouvé: {len(df[~df['Super Charge per Hit (%)'].isin(['N/A', 'Erreur', 'Erreur réseau'])])}/{len(df)}")
     
-    # Statistiques hypercharge
-    print(f"   • Hypercharge trouvé: {len(df[~df['Hypercharge per Hit (%)'].isin(['N/A', 'Erreur', 'Erreur réseau'])])}/{len(df)}")
+    # Statistiques sur les données nettoyées
+    print(f"\n📊 STATISTIQUES DES DONNÉES NETTOYÉES:")
+    numeric_cols = ['Movement_Speed', 'Health_Level_11', 'Attack_Range', 'Super_Range', 
+                   'Super_Charge_per_Hit_Percent', 'Hypercharge_per_Hit_Percent']
     
-    print(f"   • Gadget 1 trouvé: {len(df[~df['Gadget 1 Cooldown'].isin(['N/A', 'Erreur', 'Erreur réseau'])])}/{len(df)}")
-    print(f"   • Gadget 2 trouvé: {len(df[~df['Gadget 2 Cooldown'].isin(['N/A', 'Erreur', 'Erreur réseau'])])}/{len(df)}")
+    for col in numeric_cols:
+        if col in df_clean.columns:
+            non_null_count = df_clean[col].notna().sum()
+            print(f"   • {col}: {non_null_count}/{len(df_clean)} valeurs numériques")
     
-    success_rate = (successful / len(df)) * 100
-    print(f"   • Taux de succès global: {success_rate:.1f}%")
+    if len(df) > 0:
+        success_rate = (successful / len(df)) * 100
+        print(f"   • Taux de succès global: {success_rate:.1f}%")
+    else:
+        print(f"   • Aucune donnée à traiter")
     
-    # Afficher les Brawlers avec le plus de données
-    print(f"\n🏆 TOP 5 des Brawlers avec le plus de données:")
-    df['data_count'] = df.apply(lambda row: sum(1 for v in row.values[1:] 
-                                              if v not in ['N/A', 'Erreur', 'Erreur réseau']), axis=1)
-    top_brawlers = df.nlargest(5, 'data_count')[['Brawler', 'data_count']]
-    for idx, row in top_brawlers.iterrows():
-        print(f"   {row['Brawler']}: {row['data_count']}/4 données")
+    # Afficher les Brawlers avec le plus de données numériques
+    if len(df_clean) > 0:
+        print(f"\n🏆 TOP 5 des Brawlers avec le plus de données numériques:")
+        df_clean['numeric_data_count'] = df_clean.select_dtypes(include=['int64', 'float64']).notna().sum(axis=1)
+        top_brawlers = df_clean.nlargest(5, 'numeric_data_count')[['Brawler', 'numeric_data_count']]
+        for idx, row in top_brawlers.iterrows():
+            print(f"   {row['Brawler']}: {row['numeric_data_count']} données numériques")
 
 if __name__ == "__main__":
     main()

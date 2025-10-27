@@ -1,0 +1,3 @@
+Brawler,Rarity,Class,Movement_Speed,Health_Level_11,Attack_Range,Reload,Super_Range,Projectiles_per_Attack,Projectiles_per_Super,Attack_Projectile_Speed,Super_Projectile_Speed,Super_Charge_per_Hit_Percent,Hypercharge_per_Hit_Percent,Gadget_1_Cooldown_Seconds,Gadget_2_Cooldown_Seconds,Super_Duration_Seconds,Attack_Min_Damage_11,Super_Damage_11
+Spike,Legendary,Damage Dealer,720,5600,7.67,2.0,7.67,7,1.0,21743261,1739,14.31,5.0,14,14,4.5,800,800
+Colt,Rare,Damage Dealer,720,5600,9.0,1.4,11.0,61,12.0,40004440,4891,8.37,2.9295,11,14,,640,640
